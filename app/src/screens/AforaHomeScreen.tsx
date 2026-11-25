@@ -9,6 +9,10 @@ import {
   TextInput,
   StatusBar,
   I18nManager,
+  Modal,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,6 +30,7 @@ interface StoryItem {
   name: string;
   avatar: string;
   ringColors: [string, string];
+  storyText: string;
 }
 
 interface PostItem {
@@ -36,10 +41,21 @@ interface PostItem {
   content: string;
   avatar: string;
   image?: string;
-  likes: string;
-  comments: string;
-  reposts: string;
+  type: 'الصور' | 'الفيديوهات' | 'المنشورات';
+  likes: number;
+  comments: string[];
+  reposts: number;
   liked?: boolean;
+}
+
+interface ChatItem {
+  id: string;
+  name: string;
+  avatar: string;
+  lastMessage: string;
+  time: string;
+  unread: number;
+  messages: { id: string; text: string; fromMe: boolean }[];
 }
 
 const STORIES: StoryItem[] = [
@@ -48,28 +64,32 @@ const STORIES: StoryItem[] = [
     name: 'أحمد',
     avatar: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200',
     ringColors: ['#4F8CFF', '#9B4DFF'],
+    storyText: 'صباح الخير من شاطئ البحر 🌊✨',
   },
   {
     id: '2',
     name: 'سارة',
     avatar: 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=200',
-    ringColors: ['#3B82F6', '#8B5CF6'],
+    ringColors: ['#9B82F6', '#8B5CF6'],
+    storyText: 'أجواء المساء الجميلة في المدينة 🌆',
   },
   {
     id: '3',
     name: 'محمد',
     avatar: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=200',
     ringColors: ['#EC4899', '#8B5CF6'],
+    storyText: 'رفيقي الجديد اليوم 🐱💜',
   },
   {
     id: '4',
     name: 'ليلى',
     avatar: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=200',
     ringColors: ['#22C55E', '#3B82F6'],
+    storyText: 'رحلة وسط الطبيعة والهدوء 🌲',
   },
 ];
 
-const POSTS: PostItem[] = [
+const INITIAL_POSTS: PostItem[] = [
   {
     id: 'p1',
     author: 'أحمد الشمري',
@@ -77,377 +97,684 @@ const POSTS: PostItem[] = [
     timeAgo: 'منذ 2 س',
     content: 'أحياناً .. كل ما نحتاجه هو لحظة هدوء وموسيقى جميلة 💜',
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200',
-    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=900',
-    likes: '24.6K',
-    comments: '842',
-    reposts: '1.2K',
-    liked: true,
+    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800',
+    type: 'الصور',
+    likes: 124,
+    comments: ['كلام جميل جداً 👏', 'صورة رائعة تبعث على الراحة'],
+    reposts: 18,
+    liked: false,
   },
   {
     id: 'p2',
     author: 'سارة العتيبي',
     verified: true,
     timeAgo: 'منذ 4 س',
-    content: 'ابتسم .. فالحياة أجمل 💕',
+    content: 'تطبيق AFORA يجمعنا في مكان واحد بتصميم عصري وسريع! شاركونا آراءكم بالتحديث الجديد 🚀',
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200',
-    image: 'https://images.unsplash.com/photo-1490750967868-88aa4486c946?w=900',
-    likes: '11.4K',
-    comments: '310',
-    reposts: '490',
-    liked: false,
+    type: 'المنشورات',
+    likes: 89,
+    comments: ['بالتوفيق! التطبيق ممتاز'],
+    reposts: 12,
+    liked: true,
   },
 ];
 
-const FILTER_TABS: { key: FilterTab; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: 'الكل', icon: 'apps' },
-  { key: 'الصور', icon: 'image-outline' },
-  { key: 'الفيديوهات', icon: 'videocam-outline' },
-  { key: 'المنشورات', icon: 'document-text-outline' },
+const INITIAL_CHATS: ChatItem[] = [
+  {
+    id: 'c1',
+    name: 'أحمد الشمري',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200',
+    lastMessage: 'أهلاً بك في مجتمع AFORA!',
+    time: '1:15 م',
+    unread: 2,
+    messages: [
+      { id: 'm1', text: 'السلام عليكم، كيف حالك؟', fromMe: false },
+      { id: 'm2', text: 'أهلاً بك في مجتمع AFORA!', fromMe: false },
+    ],
+  },
+  {
+    id: 'c2',
+    name: 'سارة العتيبي',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200',
+    lastMessage: 'هل جربت ميزة النشر الجديدة؟',
+    time: '11:40 ص',
+    unread: 3,
+    messages: [
+      { id: 'm1', text: 'مرحباً! التصميم الجديد رائع جداً', fromMe: false },
+      { id: 'm2', text: 'هل جربت ميزة النشر الجديدة؟', fromMe: false },
+    ],
+  },
 ];
 
 export default function AforaHomeScreen() {
-  const [postText, setPostText] = useState('');
+  const [activeBottomTab, setActiveBottomTab] = useState<BottomTab>('الرئيسية');
   const [activeFilter, setActiveFilter] = useState<FilterTab>('الكل');
-  const [activeBottom, setActiveBottom] = useState<BottomTab>('الرئيسية');
-  const [likedIds, setLikedIds] = useState<Record<string, boolean>>({ p1: true });
+  const [posts, setPosts] = useState<PostItem[]>(INITIAL_POSTS);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const toggleLike = (id: string) => {
-    setLikedIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  // حالات نافذة النشر (+)
+  const [isPostModalVisible, setIsPostModalVisible] = useState(false);
+  const [newPostText, setNewPostText] = useState('');
+  const [newPostImageUrl, setNewPostImageUrl] = useState('');
+
+  // حالات المحادثات
+  const [chats, setChats] = useState<ChatItem[]>(INITIAL_CHATS);
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [chatMessageInput, setChatMessageInput] = useState('');
+
+  // حالات التعليقات والقصص والإشعارات
+  const [commentPostId, setCommentPostId] = useState<string | null>(null);
+  const [newCommentText, setNewCommentText] = useState('');
+  const [activeStory, setActiveStory] = useState<StoryItem | null>(null);
+  const [unreadNotifications, setUnreadNotifications] = useState(3);
+
+  const userAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200';
+
+  // إضافة منشور جديد
+  const handlePublishPost = () => {
+    const trimmed = newPostText.trim();
+    if (!trimmed) {
+      Alert.alert('تنبيه', 'يرجى كتابة نص المنشور أولاً.');
+      return;
+    }
+
+    const created: PostItem = {
+      id: Date.now().toString(),
+      author: 'مستخدم AFORA',
+      verified: true,
+      timeAgo: 'الآن',
+      content: trimmed,
+      avatar: userAvatar,
+      image: newPostImageUrl.trim() ? newPostImageUrl.trim() : undefined,
+      type: newPostImageUrl.trim() ? 'الصور' : 'المنشورات',
+      likes: 0,
+      comments: [],
+      reposts: 0,
+      liked: false,
+    };
+
+    setPosts([created, ...posts]);
+    setNewPostText('');
+    setNewPostImageUrl('');
+    setIsPostModalVisible(false);
+    setActiveBottomTab('الرئيسية');
   };
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor="#070514" />
+  // تبديل الإعجاب
+  const handleToggleLike = (postId: string) => {
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              liked: !post.liked,
+              likes: post.liked ? post.likes - 1 : post.likes + 1,
+            }
+          : post
+      )
+    );
+  };
 
-      <View style={styles.topBar}>
-        <TouchableOpacity style={styles.bellButton} activeOpacity={0.8}>
-          <Ionicons name="notifications-outline" size={24} color="#F3F4F6" />
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>3</Text>
-          </View>
+  // إضافة تعليق
+  const handleAddComment = () => {
+    if (!commentPostId || !newCommentText.trim()) return;
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.id === commentPostId
+          ? { ...post, comments: [...post.comments, newCommentText.trim()] }
+          : post
+      )
+    );
+    setNewCommentText('');
+  };
+
+  // إرسال رسالة في المحادثة
+  const handleSendChatMessage = () => {
+    if (!selectedChatId || !chatMessageInput.trim()) return;
+    const msgText = chatMessageInput.trim();
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === selectedChatId
+          ? {
+              ...chat,
+              lastMessage: msgText,
+              time: 'الآن',
+              unread: 0,
+              messages: [
+                ...chat.messages,
+                { id: Date.now().toString(), text: msgText, fromMe: true },
+              ],
+            }
+          : chat
+      )
+    );
+    setChatMessageInput('');
+  };
+
+  // تصفية المنشورات حسب التبويب أو البحث
+  const filteredPosts = posts.filter((post) => {
+    const matchesFilter = activeFilter === 'الكل' || post.type === activeFilter;
+    const matchesSearch =
+      !searchQuery.trim() ||
+      post.content.includes(searchQuery.trim()) ||
+      post.author.includes(searchQuery.trim());
+    return matchesFilter && matchesSearch;
+  });
+
+  const totalUnreadChats = chats.reduce((sum, c) => sum + c.unread, 0);
+  const selectedChat = chats.find((c) => c.id === selectedChatId) || null;
+  const activeCommentPost = posts.find((p) => p.id === commentPostId) || null;
+
+  // عرض بطاقة المنشور
+  const renderPostCard = (post: PostItem) => (
+    <View key={post.id} style={styles.postCard}>
+      <View style={styles.postHeader}>
+        <TouchableOpacity
+          onPress={() =>
+            Alert.alert('خيارات المنشور', 'اختر إجراءً:', [
+              {
+                text: 'حذف المنشور',
+                style: 'destructive',
+                onPress: () => setPosts((prev) => prev.filter((p) => p.id !== post.id)),
+              },
+              { text: 'إلغاء', style: 'cancel' },
+            ])
+          }
+        >
+          <Feather name="more-horizontal" size={20} color="#9CA3AF" />
         </TouchableOpacity>
 
-        <View style={styles.brandBox}>
-          <LinearGradient
-            colors={['#4DA6FF', '#8A4FFF']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.logoMark}
-          >
-            <Text style={styles.logoMarkText}>A</Text>
+        <View style={styles.postAuthorRow}>
+          <View style={styles.postAuthorInfo}>
+            <View style={styles.authorNameRow}>
+              {post.verified && (
+                <Ionicons name="checkmark-circle" size={16} color="#3B82F6" style={{ marginLeft: 4 }} />
+              )}
+              <Text style={styles.authorName}>{post.author}</Text>
+            </View>
+            <View style={styles.timeRow}>
+              <Text style={styles.timeText}>{post.timeAgo}</Text>
+              <Ionicons name="globe-outline" size={12} color="#9CA3AF" style={{ marginLeft: 4 }} />
+            </View>
+          </View>
+          <Image source={{ uri: post.avatar }} style={styles.postAvatar} />
+        </View>
+      </View>
+
+      <Text style={styles.postContent}>{post.content}</Text>
+
+      {post.image && <Image source={{ uri: post.image }} style={styles.postImage} />}
+
+      <View style={styles.postActionsRow}>
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() =>
+            setPosts((prev) =>
+              prev.map((p) => (p.id === post.id ? { ...p, reposts: p.reposts + 1 } : p))
+            )
+          }
+        >
+          <Feather name="repeat" size={17} color="#9CA3AF" />
+          <Text style={styles.actionCount}>{post.reposts}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.actionBtn} onPress={() => setCommentPostId(post.id)}>
+          <Ionicons name="chatbubble-outline" size={17} color="#9CA3AF" />
+          <Text style={styles.actionCount}>{post.comments.length}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.actionBtn} onPress={() => handleToggleLike(post.id)}>
+          <Ionicons
+            name={post.liked ? 'heart' : 'heart-outline'}
+            size={19}
+            color={post.liked ? '#EC4899' : '#9CA3AF'}
+          />
+          <Text style={[styles.actionCount, post.liked && { color: '#EC4899' }]}>{post.likes}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#0B0B14" />
+
+      {/* الشريط العلوي */}
+      <View style={styles.topHeader}>
+        <TouchableOpacity
+          style={styles.headerLeftGroup}
+          onPress={() => setActiveBottomTab('ملفي')}
+        >
+          <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+          <Image source={{ uri: userAvatar }} style={styles.headerAvatar} />
+        </TouchableOpacity>
+
+        <View style={styles.logoContainer}>
+          <Text style={styles.logoText}>AFORA</Text>
+          <LinearGradient colors={['#8B5CF6', '#6366F1']} style={styles.logoBadge}>
+            <Text style={styles.logoBadgeText}>A</Text>
           </LinearGradient>
-          <Text style={styles.brandTitle}>AFORA</Text>
         </View>
 
-        <TouchableOpacity style={styles.profileHeaderBtn} activeOpacity={0.8}>
-          <Image
-            source={{
-              uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
-            }}
-            style={styles.headerAvatar}
-          />
-          <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+        <TouchableOpacity
+          style={styles.bellButton}
+          onPress={() => {
+            setUnreadNotifications(0);
+            Alert.alert('الإشعارات', 'أهلاً بك! لديك 3 إشعارات ترحيبية في مجتمع AFORA.');
+          }}
+        >
+          <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
+          {unreadNotifications > 0 && (
+            <View style={styles.notificationBadge}>
+              <Text style={styles.badgeText}>{unreadNotifications}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.storiesRow}
-        >
-          <TouchableOpacity activeOpacity={0.85} style={styles.addStoryWrapper}>
-            <LinearGradient
-              colors={['#2563EB', '#7C3AED', '#4C1D95']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.addStoryCard}
-            >
-              <View style={styles.plusCircle}>
-                <Ionicons name="add" size={24} color="#FFFFFF" />
-              </View>
-              <Text style={styles.addStoryLabel}>إضافة{'\n'}قصة</Text>
-            </LinearGradient>
+      {/* محتوى التبويبات */}
+      {activeBottomTab === 'الرئيسية' && (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          {/* شريط القصص */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.storiesContainer}
+          >
+            {STORIES.map((story) => (
+              <TouchableOpacity
+                key={story.id}
+                style={styles.storyItem}
+                onPress={() => setActiveStory(story)}
+              >
+                <LinearGradient colors={story.ringColors} style={styles.storyRing}>
+                  <Image source={{ uri: story.avatar }} style={styles.storyAvatar} />
+                </LinearGradient>
+                <Text style={styles.storyName}>{story.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* صندوق إنشاء منشور سريع */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.quickPostBox}
+            onPress={() => setIsPostModalVisible(true)}
+          >
+            <View style={styles.quickPostIcons}>
+              <TouchableOpacity onPress={() => setIsPostModalVisible(true)}>
+                <Feather name="edit" size={19} color="#3B82F6" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setIsPostModalVisible(true)}>
+                <Feather name="video" size={19} color="#EC4899" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setIsPostModalVisible(true)}>
+                <Feather name="image" size={19} color="#8B5CF6" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.quickPostRight}>
+              <Text style={styles.quickPostPlaceholder}>بم تفكر الآن؟ انشر شيئاً...</Text>
+              <Image source={{ uri: userAvatar }} style={styles.quickPostAvatar} />
+            </View>
           </TouchableOpacity>
 
-          {STORIES.map((story) => (
-            <TouchableOpacity
-              key={story.id}
-              activeOpacity={0.85}
-              style={styles.storyItem}
-            >
-              <LinearGradient
-                colors={story.ringColors}
-                style={styles.storyRing}
-              >
-                <View style={styles.storyInnerBorder}>
-                  <Image source={{ uri: story.avatar }} style={styles.storyAvatar} />
-                </View>
-              </LinearGradient>
-              <View style={styles.storyDot} />
-              <Text style={styles.storyName} numberOfLines={1}>
-                {story.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <View style={styles.composerCard}>
-          <Image
-            source={{
-              uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
-            }}
-            style={styles.composerAvatar}
-          />
-          <TextInput
-            value={postText}
-            onChangeText={setPostText}
-            placeholder="ماذا يدور في بالك؟"
-            placeholderTextColor="#7C7A96"
-            style={styles.composerInput}
-            textAlign="right"
-          />
-          <View style={styles.composerActions}>
-            <TouchableOpacity style={styles.iconBtn}>
-              <Ionicons name="image-outline" size={20} color="#A855F7" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn}>
-              <Ionicons name="videocam-outline" size={20} color="#EC4899" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn}>
-              <Feather name="edit" size={19} color="#60A5FA" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          {FILTER_TABS.map((tab) => {
-            const isActive = activeFilter === tab.key;
-            if (isActive) {
+          {/* أزرار الفلترة */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filtersRow}
+          >
+            {(['الكل', 'الصور', 'الفيديوهات', 'المنشورات'] as FilterTab[]).map((tab) => {
+              const isSelected = activeFilter === tab;
               return (
                 <TouchableOpacity
-                  key={tab.key}
-                  onPress={() => setActiveFilter(tab.key)}
-                  activeOpacity={0.85}
+                  key={tab}
+                  style={[styles.filterPill, isSelected && styles.filterPillActive]}
+                  onPress={() => setActiveFilter(tab)}
                 >
-                  <LinearGradient
-                    colors={['#7C3AED', '#4F46E5']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.activeFilterPill}
-                  >
-                    <Text style={styles.activeFilterText}>{tab.key}</Text>
-                  </LinearGradient>
+                  <Text style={[styles.filterText, isSelected && styles.filterTextActive]}>{tab}</Text>
                 </TouchableOpacity>
               );
-            }
+            })}
+          </ScrollView>
 
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                onPress={() => setActiveFilter(tab.key)}
-                style={styles.inactiveFilterPill}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name={tab.icon}
-                  size={16}
-                  color={
-                    tab.key === 'الصور'
-                      ? '#60A5FA'
-                      : tab.key === 'الفيديوهات'
-                      ? '#F472B6'
-                      : '#34D399'
-                  }
-                />
-                <Text style={styles.inactiveFilterText}>{tab.key}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          {/* قائمة المنشورات */}
+          {filteredPosts.length > 0 ? (
+            filteredPosts.map(renderPostCard)
+          ) : (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyText}>لا توجد منشورات في هذا القسم حالياً.</Text>
+            </View>
+          )}
         </ScrollView>
+      )}
 
-        {POSTS.map((post) => {
-          const isLiked = !!likedIds[post.id];
-          return (
-            <View key={post.id} style={styles.postCard}>
-              <View style={styles.postHeader}>
-                <TouchableOpacity>
-                  <Ionicons name="ellipsis-horizontal" size={20} color="#9CA3AF" />
-                </TouchableOpacity>
+      {/* تبويب البحث */}
+      {activeBottomTab === 'بحث' && (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.searchBarContainer}>
+            <Ionicons name="search" size={20} color="#9CA3AF" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="ابحث عن منشور أو عضو..."
+              placeholderTextColor="#6B7280"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              textAlign="right"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+            )}
+          </View>
+          <Text style={styles.sectionTitle}>نتائج البحث ({filteredPosts.length})</Text>
+          {filteredPosts.map(renderPostCard)}
+        </ScrollView>
+      )}
 
-                <View style={styles.postAuthorRow}>
-                  <View style={styles.postAuthorMeta}>
-                    <View style={styles.nameWithBadge}>
-                      <Text style={styles.postAuthorName}>{post.author}</Text>
-                      {post.verified && (
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={15}
-                          color="#3B82F6"
-                          style={styles.verifiedIcon}
-                        />
-                      )}
-                    </View>
-                    <View style={styles.timeRow}>
-                      <Ionicons name="globe-outline" size={12} color="#8E8CA8" />
-                      <Text style={styles.postTime}>{post.timeAgo}</Text>
-                    </View>
+      {/* تبويب المحادثات */}
+      {activeBottomTab === 'المحادثات' && (
+        <View style={{ flex: 1 }}>
+          {!selectedChat ? (
+            <ScrollView contentContainerStyle={styles.scrollContent}>
+              <Text style={styles.sectionTitle}>المحادثات ({chats.length})</Text>
+              {chats.map((chat) => (
+                <TouchableOpacity
+                  key={chat.id}
+                  style={styles.chatRow}
+                  onPress={() => {
+                    setSelectedChatId(chat.id);
+                    setChats((prev) =>
+                      prev.map((c) => (c.id === chat.id ? { ...c, unread: 0 } : c))
+                    );
+                  }}
+                >
+                  <View style={styles.chatMeta}>
+                    <Text style={styles.chatTime}>{chat.time}</Text>
+                    {chat.unread > 0 && (
+                      <View style={styles.chatUnreadBadge}>
+                        <Text style={styles.badgeText}>{chat.unread}</Text>
+                      </View>
+                    )}
                   </View>
-                  <Image source={{ uri: post.avatar }} style={styles.postAvatar} />
-                </View>
+
+                  <View style={styles.chatInfo}>
+                    <Text style={styles.chatName}>{chat.name}</Text>
+                    <Text style={styles.chatLastMsg} numberOfLines={1}>
+                      {chat.lastMessage}
+                    </Text>
+                  </View>
+
+                  <Image source={{ uri: chat.avatar }} style={styles.chatAvatar} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <KeyboardAvoidingView
+              style={{ flex: 1 }}
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
+              <View style={styles.chatDetailHeader}>
+                <TouchableOpacity onPress={() => setSelectedChatId(null)}>
+                  <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                </TouchableOpacity>
+                <Text style={styles.chatName}>{selectedChat.name}</Text>
+                <Image source={{ uri: selectedChat.avatar }} style={styles.headerAvatar} />
               </View>
 
-              <Text style={styles.postContent}>{post.content}</Text>
-
-              {post.image && (
-                <Image source={{ uri: post.image }} style={styles.postImage} />
-              )}
-
-              <View style={styles.postFooter}>
-                <View style={styles.leftActions}>
-                  <TouchableOpacity
-                    style={styles.statBtn}
-                    onPress={() => toggleLike(post.id)}
+              <ScrollView contentContainerStyle={{ padding: 16 }}>
+                {selectedChat.messages.map((m) => (
+                  <View
+                    key={m.id}
+                    style={[
+                      styles.msgBubble,
+                      m.fromMe ? styles.msgBubbleMe : styles.msgBubbleOther,
+                    ]}
                   >
-                    <Ionicons
-                      name={isLiked ? 'heart' : 'heart-outline'}
-                      size={19}
-                      color={isLiked ? '#F43F5E' : '#9CA3AF'}
-                    />
-                    <Text
-                      style={[
-                        styles.statText,
-                        isLiked && { color: '#F43F5E' },
-                      ]}
-                    >
-                      {post.likes}
-                    </Text>
-                  </TouchableOpacity>
+                    <Text style={styles.msgText}>{m.text}</Text>
+                  </View>
+                ))}
+              </ScrollView>
 
-                  <TouchableOpacity style={styles.statBtn}>
-                    <Ionicons name="chatbubble-outline" size={18} color="#9CA3AF" />
-                    <Text style={styles.statText}>{post.comments}</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.statBtn}>
-                    <Feather name="repeat" size={18} color="#9CA3AF" />
-                    <Text style={styles.statText}>{post.reposts}</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.statBtn}>
-                    <Ionicons name="paper-plane-outline" size={18} color="#9CA3AF" />
-                  </TouchableOpacity>
-                </View>
-
-                <TouchableOpacity>
-                  <Ionicons name="bookmark-outline" size={19} color="#9CA3AF" />
+              <View style={styles.chatInputBar}>
+                <TouchableOpacity style={styles.sendBtn} onPress={handleSendChatMessage}>
+                  <Ionicons name="send" size={18} color="#FFFFFF" />
                 </TouchableOpacity>
+                <TextInput
+                  style={styles.chatTextInput}
+                  placeholder="اكتب رسالتك هنا..."
+                  placeholderTextColor="#6B7280"
+                  value={chatMessageInput}
+                  onChangeText={setChatMessageInput}
+                  textAlign="right"
+                />
+              </View>
+            </KeyboardAvoidingView>
+          )}
+        </View>
+      )}
+
+      {/* تبويب ملفي */}
+      {activeBottomTab === 'ملفي' && (
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.profileCard}>
+            <Image source={{ uri: userAvatar }} style={styles.profileLargeAvatar} />
+            <Text style={styles.profileName}>مستخدم AFORA</Text>
+            <Text style={styles.profileHandle}>@afora_member</Text>
+
+            <View style={styles.statsRow}>
+              <View style={styles.statBox}>
+                <Text style={styles.statNumber}>{posts.length}</Text>
+                <Text style={styles.statLabel}>منشورات</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statNumber}>142</Text>
+                <Text style={styles.statLabel}>متابِعون</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statNumber}>85</Text>
+                <Text style={styles.statLabel}>يتابع</Text>
               </View>
             </View>
-          );
-        })}
-      </ScrollView>
 
+            <TouchableOpacity
+              style={styles.primaryActionBtn}
+              onPress={() => setIsPostModalVisible(true)}
+            >
+              <Text style={styles.primaryActionBtnText}>+ إضافة منشور جديد</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* شريط التنقل السفلي وزر النشر (+) */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setActiveBottom('الرئيسية')}
+          onPress={() => {
+            setSelectedChatId(null);
+            setActiveBottomTab('ملفي');
+          }}
         >
           <Ionicons
-            name={activeBottom === 'الرئيسية' ? 'home' : 'home-outline'}
+            name={activeBottomTab === 'ملفي' ? 'person' : 'person-outline'}
             size={22}
-            color={activeBottom === 'الرئيسية' ? '#8B5CF6' : '#8E8CA8'}
+            color={activeBottomTab === 'ملفي' ? '#8B5CF6' : '#9CA3AF'}
           />
-          <Text
-            style={[
-              styles.navLabel,
-              activeBottom === 'الرئيسية' && styles.navLabelActive,
-            ]}
-          >
-            الرئيسية
+          <Text style={[styles.navText, activeBottomTab === 'ملفي' && styles.navTextActive]}>
+            ملفي
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setActiveBottom('بحث')}
-        >
-          <Ionicons
-            name="search-outline"
-            size={22}
-            color={activeBottom === 'بحث' ? '#8B5CF6' : '#8E8CA8'}
-          />
-          <Text
-            style={[
-              styles.navLabel,
-              activeBottom === 'بحث' && styles.navLabelActive,
-            ]}
-          >
-            بحث
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity activeOpacity={0.85} style={styles.fabWrapper}>
-          <LinearGradient
-            colors={['#4F8CFF', '#9333EA']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.fabCircle}
-          >
-            <Ionicons name="add" size={28} color="#FFFFFF" />
-          </LinearGradient>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => setActiveBottom('المحادثات')}
+          onPress={() => {
+            setSelectedChatId(null);
+            setActiveBottomTab('المحادثات');
+          }}
         >
           <View>
             <Ionicons
-              name="chatbubble-ellipses-outline"
+              name={activeBottomTab === 'المحادثات' ? 'chatbubbles' : 'chatbubbles-outline'}
               size={22}
-              color={activeBottom === 'المحادثات' ? '#8B5CF6' : '#8E8CA8'}
+              color={activeBottomTab === 'المحادثات' ? '#8B5CF6' : '#9CA3AF'}
             />
-            <View style={styles.chatBadge}>
-              <Text style={styles.badgeText}>5</Text>
-            </View>
+            {totalUnreadChats > 0 && (
+              <View style={styles.chatBadge}>
+                <Text style={styles.badgeText}>{totalUnreadChats}</Text>
+              </View>
+            )}
           </View>
-          <Text
-            style={[
-              styles.navLabel,
-              activeBottom === 'المحادثات' && styles.navLabelActive,
-            ]}
-          >
+          <Text style={[styles.navText, activeBottomTab === 'المحادثات' && styles.navTextActive]}>
             المحادثات
           </Text>
         </TouchableOpacity>
 
+        {/* زر النشر الأوسط (+) */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={styles.centerPlusWrapper}
+          onPress={() => setIsPostModalVisible(true)}
+        >
+          <LinearGradient colors={['#6366F1', '#8B5CF6']} style={styles.centerPlusButton}>
+            <Ionicons name="add" size={32} color="#FFFFFF" />
+          </LinearGradient>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setActiveBottom('ملفي')}
+          onPress={() => {
+            setSelectedChatId(null);
+            setActiveBottomTab('بحث');
+          }}
         >
           <Ionicons
-            name={activeBottom === 'ملفي' ? 'person' : 'person-outline'}
+            name={activeBottomTab === 'بحث' ? 'search' : 'search-outline'}
             size={22}
-            color={activeBottom === 'ملفي' ? '#8B5CF6' : '#8E8CA8'}
+            color={activeBottomTab === 'بحث' ? '#8B5CF6' : '#9CA3AF'}
           />
-          <Text
-            style={[
-              styles.navLabel,
-              activeBottom === 'ملفي' && styles.navLabelActive,
-            ]}
-          >
-            ملفي
+          <Text style={[styles.navText, activeBottomTab === 'بحث' && styles.navTextActive]}>
+            بحث
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => {
+            setSelectedChatId(null);
+            setActiveBottomTab('الرئيسية');
+          }}
+        >
+          <Ionicons
+            name={activeBottomTab === 'الرئيسية' ? 'home' : 'home-outline'}
+            size={22}
+            color={activeBottomTab === 'الرئيسية' ? '#8B5CF6' : '#9CA3AF'}
+          />
+          <Text style={[styles.navText, activeBottomTab === 'الرئيسية' && styles.navTextActive]}>
+            الرئيسية
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* نافذة إنشاء منشور جديد (+) */}
+      <Modal visible={isPostModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => setIsPostModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#9CA3AF" />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>منشور جديد</Text>
+              <TouchableOpacity style={styles.publishBtn} onPress={handlePublishPost}>
+                <Text style={styles.publishBtnText}>نشر</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.modalTextArea}
+              placeholder="اكتب ما يدور في ذهنك هنا..."
+              placeholderTextColor="#6B7280"
+              multiline
+              value={newPostText}
+              onChangeText={setNewPostText}
+              textAlign="right"
+            />
+
+            <TextInput
+              style={styles.modalUrlInput}
+              placeholder="رابط صورة (اختياري) https://..."
+              placeholderTextColor="#6B7280"
+              value={newPostImageUrl}
+              onChangeText={setNewPostImageUrl}
+              textAlign="right"
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* نافذة التعليقات */}
+      <Modal visible={!!activeCommentPost} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => setCommentPostId(null)}>
+                <Ionicons name="close" size={24} color="#9CA3AF" />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>التعليقات</Text>
+              <View style={{ width: 24 }} />
+            </View>
+
+            <ScrollView style={{ maxHeight: 220, marginVertical: 10 }}>
+              {activeCommentPost?.comments.length ? (
+                activeCommentPost.comments.map((c, idx) => (
+                  <View key={idx} style={styles.commentItem}>
+                    <Text style={styles.commentText}>{c}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.emptyText}>لا توجد تعليقات بعد. كن أول من يعلق!</Text>
+              )}
+            </ScrollView>
+
+            <View style={styles.chatInputBar}>
+              <TouchableOpacity style={styles.sendBtn} onPress={handleAddComment}>
+                <Ionicons name="send" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TextInput
+                style={styles.chatTextInput}
+                placeholder="أضف تعليقاً..."
+                placeholderTextColor="#6B7280"
+                value={newCommentText}
+                onChangeText={setNewCommentText}
+                textAlign="right"
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* نافذة عرض القصة (Story) */}
+      <Modal visible={!!activeStory} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.storyModalCard}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => setActiveStory(null)}>
+                <Ionicons name="close" size={26} color="#FFFFFF" />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>{activeStory?.name}</Text>
+              <View style={{ width: 26 }} />
+            </View>
+            {activeStory && (
+              <>
+                <Image source={{ uri: activeStory.avatar }} style={styles.storyFullImage} />
+                <Text style={styles.storyFullText}>{activeStory.storyText}</Text>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -455,137 +782,98 @@ export default function AforaHomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#070514',
+    backgroundColor: '#0B0B14',
   },
-  topBar: {
+  topHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#19192B',
   },
-  bellButton: {
-    position: 'relative',
-    padding: 4,
-  },
-  badge: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    backgroundColor: '#EF4444',
-    borderRadius: 10,
-    minWidth: 16,
-    height: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  badgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  brandBox: {
+  headerLeftGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  logoMark: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoMarkText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  brandTitle: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-  },
-  profileHeaderBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   headerAvatar: {
     width: 34,
     height: 34,
     borderRadius: 17,
     borderWidth: 1.5,
-    borderColor: '#7C3AED',
+    borderColor: '#8B5CF6',
   },
-  scrollContent: {
-    paddingBottom: 96,
-  },
-  storiesRow: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 12,
-  },
-  addStoryWrapper: {
-    width: 84,
-    height: 122,
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  addStoryCard: {
-    flex: 1,
+  logoContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
     gap: 8,
   },
-  plusCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+  logoText: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+  },
+  logoBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addStoryLabel: {
+  logoBadgeText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  bellButton: {
+    position: 'relative',
+    padding: 4,
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#EF4444',
+    borderRadius: 9,
+    minWidth: 17,
+    height: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
     fontWeight: '700',
-    textAlign: 'center',
-    lineHeight: 16,
+  },
+  scrollContent: {
+    paddingBottom: 100,
+    paddingHorizontal: 14,
+  },
+  storiesContainer: {
+    paddingVertical: 14,
+    gap: 14,
   },
   storyItem: {
     alignItems: 'center',
-    width: 78,
+    width: 72,
   },
   storyRing: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     padding: 2.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  storyInnerBorder: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 36,
-    backgroundColor: '#070514',
-    padding: 2,
-  },
   storyAvatar: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 34,
-  },
-  storyDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#38BDF8',
-    marginTop: -4,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: '#0B0B14',
   },
   storyName: {
     color: '#E5E7EB',
@@ -593,77 +881,67 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontWeight: '600',
   },
-  composerCard: {
-    marginHorizontal: 14,
-    marginTop: 6,
-    backgroundColor: '#131029',
-    borderRadius: 22,
+  quickPostBox: {
+    backgroundColor: '#151525',
+    borderRadius: 16,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: '#231E46',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: '#23233A',
+    marginBottom: 14,
+  },
+  quickPostIcons: {
+    flexDirection: 'row',
+    gap: 14,
+  },
+  quickPostRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
-  composerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
-  composerInput: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 14,
-    paddingVertical: 2,
-  },
-  composerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  iconBtn: {
-    padding: 4,
-  },
-  filterRow: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 10,
-  },
-  activeFilterPill: {
-    paddingHorizontal: 22,
-    paddingVertical: 9,
-    borderRadius: 20,
-  },
-  activeFilterText: {
-    color: '#FFFFFF',
+  quickPostPlaceholder: {
+    color: '#9CA3AF',
     fontSize: 13,
-    fontWeight: '700',
   },
-  inactiveFilterPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#131029',
-    borderWidth: 1,
-    borderColor: '#231E46',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+  quickPostAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+  filtersRow: {
+    flexDirection: 'row-reverse',
+    gap: 8,
+    marginBottom: 16,
+  },
+  filterPill: {
+    backgroundColor: '#151525',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#23233A',
   },
-  inactiveFilterText: {
+  filterPillActive: {
+    backgroundColor: '#7C3AED',
+    borderColor: '#8B5CF6',
+  },
+  filterText: {
     color: '#D1D5DB',
     fontSize: 13,
     fontWeight: '600',
   },
+  filterTextActive: {
+    color: '#FFFFFF',
+  },
   postCard: {
-    marginHorizontal: 14,
-    marginBottom: 14,
-    backgroundColor: '#110E24',
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: '#1E1A3B',
+    backgroundColor: '#151525',
+    borderRadius: 18,
     padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#23233A',
   },
   postHeader: {
     flexDirection: 'row',
@@ -676,29 +954,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  postAuthorMeta: {
+  postAuthorInfo: {
     alignItems: 'flex-end',
   },
-  nameWithBadge: {
+  authorNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  postAuthorName: {
+  authorName: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
-  },
-  verifiedIcon: {
-    marginRight: 4,
   },
   timeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     marginTop: 2,
   },
-  postTime: {
-    color: '#8E8CA8',
+  timeText: {
+    color: '#9CA3AF',
     fontSize: 11,
   },
   postAvatar: {
@@ -716,29 +990,24 @@ const styles = StyleSheet.create({
   postImage: {
     width: '100%',
     height: 210,
-    borderRadius: 16,
+    borderRadius: 14,
     marginBottom: 12,
   },
-  postFooter: {
+  postActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#23233A',
+  },
+  actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 4,
+    gap: 6,
   },
-  leftActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  statBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  statText: {
+  actionCount: {
     color: '#9CA3AF',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
   },
   bottomNav: {
     position: 'absolute',
@@ -746,50 +1015,318 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 70,
-    backgroundColor: '#0D0A1E',
-    borderTopWidth: 1,
-    borderTopColor: '#1E1A3B',
+    backgroundColor: '#121220',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingHorizontal: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#23233A',
+    paddingBottom: 6,
   },
   navItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    minWidth: 54,
+    flex: 1,
   },
-  navLabel: {
-    color: '#8E8CA8',
+  navText: {
+    color: '#9CA3AF',
     fontSize: 11,
+    marginTop: 4,
     fontWeight: '600',
   },
-  navLabelActive: {
-    color: '#A855F7',
-    fontWeight: '700',
-  },
-  fabWrapper: {
-    marginTop: -24,
-  },
-  fabCircle: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
+  navTextActive: {
+    color: '#8B5CF6',
   },
   chatBadge: {
     position: 'absolute',
     top: -4,
     right: -8,
     backgroundColor: '#EF4444',
-    borderRadius: 10,
+    borderRadius: 8,
     minWidth: 16,
     height: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
+  },
+  centerPlusWrapper: {
+    marginTop: -28,
+  },
+  centerPlusButton: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#0B0B14',
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#151525',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#23233A',
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 14,
+  },
+  sectionTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'right',
+    marginVertical: 10,
+  },
+  chatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#151525',
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#23233A',
+  },
+  chatMeta: {
+    alignItems: 'flex-start',
+    gap: 4,
+  },
+  chatTime: {
+    color: '#9CA3AF',
+    fontSize: 11,
+  },
+  chatUnreadBadge: {
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatInfo: {
+    flex: 1,
+    alignItems: 'flex-end',
+    marginHorizontal: 12,
+  },
+  chatName: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  chatLastMsg: {
+    color: '#9CA3AF',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  chatAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  chatDetailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    backgroundColor: '#151525',
+    borderBottomWidth: 1,
+    borderBottomColor: '#23233A',
+  },
+  msgBubble: {
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 8,
+    maxWidth: '80%',
+  },
+  msgBubbleMe: {
+    backgroundColor: '#7C3AED',
+    alignSelf: 'flex-end',
+  },
+  msgBubbleOther: {
+    backgroundColor: '#1E1E32',
+    alignSelf: 'flex-start',
+  },
+  msgText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    textAlign: 'right',
+  },
+  chatInputBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    backgroundColor: '#151525',
+    borderTopWidth: 1,
+    borderTopColor: '#23233A',
+    marginBottom: 72,
+    gap: 8,
+  },
+  chatTextInput: {
+    flex: 1,
+    backgroundColor: '#0B0B14',
+    color: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  sendBtn: {
+    backgroundColor: '#7C3AED',
+    padding: 10,
+    borderRadius: 12,
+  },
+  profileCard: {
+    backgroundColor: '#151525',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    marginTop: 18,
+    borderWidth: 1,
+    borderColor: '#23233A',
+  },
+  profileLargeAvatar: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    borderWidth: 2,
+    borderColor: '#8B5CF6',
+    marginBottom: 12,
+  },
+  profileName: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  profileHandle: {
+    color: '#9CA3AF',
+    fontSize: 13,
+    marginTop: 4,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginVertical: 18,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#23233A',
+  },
+  statBox: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  statLabel: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  primaryActionBtn: {
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  primaryActionBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    backgroundColor: '#151525',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#2E2E4A',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  publishBtn: {
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  publishBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  modalTextArea: {
+    backgroundColor: '#0B0B14',
+    color: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 110,
+    textAlignVertical: 'top',
+    marginBottom: 10,
+  },
+  modalUrlInput: {
+    backgroundColor: '#0B0B14',
+    color: '#FFFFFF',
+    borderRadius: 12,
+    padding: 10,
+  },
+  commentItem: {
+    backgroundColor: '#0B0B14',
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  commentText: {
+    color: '#E5E7EB',
+    textAlign: 'right',
+  },
+  storyModalCard: {
+    backgroundColor: '#151525',
+    borderRadius: 20,
+    padding: 16,
+    alignItems: 'center',
+  },
+  storyFullImage: {
+    width: '100%',
+    height: 300,
+    borderRadius: 16,
+    marginVertical: 12,
+  },
+  storyFullText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  emptyBox: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    textAlign: 'center',
   },
 });
