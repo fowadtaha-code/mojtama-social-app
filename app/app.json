@@ -6,7 +6,8 @@
                     "orientation": "portrait",
                         "android": {
                               "package": "com.fowad123.mojtama",
-                                    "versionCode": 2
+                                    "versionCode": 3
+                                   
                                         },
                                             "extra": {
                                                   "eas": {
