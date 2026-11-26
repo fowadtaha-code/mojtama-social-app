@@ -4,11 +4,11 @@
     "slug": "mojtama-social-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./AFORA_app_icon_512x512.png",
     "android": {
       "package": "com.fowad123.mojtama",
       "versionCode": 7,
-      "icon": "./assets/icon.png"
+      "icon": "./AFORA_app_icon_512x512.png"
     },
     "extra": {
       "eas": {
