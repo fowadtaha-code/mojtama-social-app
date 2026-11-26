@@ -17,7 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, Feather } from '@expo/vector-icons';
-
+import FriendsScreen from "./FriendsScreen";
 if (!I18nManager.isRTL) {
   I18nManager.allowRTL(true);
 }
@@ -451,29 +451,8 @@ export default function AforaHomeScreen() {
       )}
 
       {/* تبويب البحث */}
-      {activeBottomTab === 'بحث' && (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          <View style={styles.searchBarContainer}>
-            <Ionicons name="search" size={20} color="#9CA3AF" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="ابحث عن منشور أو عضو..."
-              placeholderTextColor="#6B7280"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              textAlign="right"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-              </TouchableOpacity>
-            )}
-          </View>
-          <Text style={styles.sectionTitle}>نتائج البحث ({filteredPosts.length})</Text>
-          {filteredPosts.map(renderPostCard)}
-        </ScrollView>
-      )}
-
+      {activeBottomTab === 'بحث' && (<
+        <FriendsScreen />
       {/* تبويب المحادثات */}
       {activeBottomTab === 'المحادثات' && (
         <View style={{ flex: 1 }}>
