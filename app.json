@@ -1,16 +1,18 @@
 {
   "expo": {
-    "name": "Mojtama",
+    "name": "AFORA",
     "slug": "mojtama-social-app",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "android": {
       "package": "com.fowad123.mojtama",
-      "versionCode": 2
+      "versionCode": 7,
+      "icon": "./assets/icon.png"
     },
     "extra": {
       "eas": {
-        "projectId": "ae4f274b-1a49-4a71-9956-70c489e824ff"
+        "projectId": "ae4f374b-1a49-4a71-9954-76c410a124ff"
       }
     }
   }
