@@ -8,6 +8,8 @@ import {
   TextInput,
   SafeAreaView,
   StatusBar,
+  Modal,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -34,6 +36,13 @@ interface PostItem {
   content: string;
   hasPhoto?: boolean;
   hasVideo?: boolean;
+}
+
+interface ChatMessage {
+  id: string;
+  sender: 'me' | 'them';
+  text: string;
+  time: string;
 }
 
 const INITIAL_FRIENDS_DATA: FriendItem[] = [
@@ -117,9 +126,20 @@ const POSTS: PostItem[] = [
   },
 ];
 
+const INITIAL_MESSAGES: Record<string, ChatMessage[]> = {
+  '1': [
+    { id: 'm1', sender: 'them', text: 'هلا بك! كيف أمور التطبيق؟', time: '05:10 ص' },
+    { id: 'm2', sender: 'me', text: 'أهلاً أحمد، شغالين على تطوير المزايا خطوة بخطوة.', time: '05:12 ص' },
+  ],
+  '2': [
+    { id: 'm3', sender: 'them', text: 'أهلاً، شكل الواجهة الداكنة طالع مرتب جداً.', time: '04:45 ص' },
+  ],
+};
+
 type MediaFilter = 'all' | 'photos' | 'videos' | 'posts';
 type BottomTab = 'home' | 'search' | 'friends' | 'chats' | 'profile';
 type FriendsSubTab = 'friends' | 'requests';
+type CallType = 'voice' | 'video' | null;
 
 const AforaHomeScreen: React.FC = () => {
   const [users, setUsers] = useState<FriendItem[]>(INITIAL_FRIENDS_DATA);
@@ -129,6 +149,15 @@ const AforaHomeScreen: React.FC = () => {
   const [postDraft, setPostDraft] = useState<string>('');
   const [postsList, setPostsList] = useState<PostItem[]>(POSTS);
   const [friendSearchQuery, setFriendSearchQuery] = useState<string>('');
+
+  // حالة الدردشة والمكالمات
+  const [activeChatFriend, setActiveChatFriend] = useState<FriendItem | null>(null);
+  const [messagesByFriend, setMessagesByFriend] =
+    useState<Record<string, ChatMessage[]>>(INITIAL_MESSAGES);
+  const [chatInput, setChatInput] = useState<string>('');
+  const [callType, setCallType] = useState<CallType>(null);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [isSpeaker, setIsSpeaker] = useState<boolean>(true);
 
   const friendsList = useMemo(
     () => users.filter((u) => u.status === 'friend'),
@@ -172,6 +201,9 @@ const AforaHomeScreen: React.FC = () => {
     setUsers((prev) =>
       prev.map((u) => (u.id === id ? { ...u, status: 'none' } : u))
     );
+    if (activeChatFriend?.id === id) {
+      setActiveChatFriend(null);
+    }
   };
 
   const toggleFriendConnection = (id: string) => {
@@ -199,6 +231,39 @@ const AforaHomeScreen: React.FC = () => {
     setPostsList((prev) => [newPost, ...prev]);
     setPostDraft('');
     setBottomTab('home');
+  };
+
+  const openDirectChat = (friend: FriendItem) => {
+    setActiveChatFriend(friend);
+    setBottomTab('chats');
+  };
+
+  const sendChatMessage = () => {
+    const text = chatInput.trim();
+    if (!text || !activeChatFriend) return;
+
+    const newMsg: ChatMessage = {
+      id: String(Date.now()),
+      sender: 'me',
+      text,
+      time: 'الآن',
+    };
+
+    setMessagesByFriend((prev) => ({
+      ...prev,
+      [activeChatFriend.id]: [...(prev[activeChatFriend.id] || []), newMsg],
+    }));
+    setChatInput('');
+  };
+
+  const startCall = (type: 'voice' | 'video') => {
+    setIsMuted(false);
+    setIsSpeaker(type === 'video');
+    setCallType(type);
+  };
+
+  const endCall = () => {
+    setCallType(null);
   };
 
   const renderUserRow = (person: FriendItem, mode: 'search' | FriendsSubTab) => (
@@ -268,6 +333,10 @@ const AforaHomeScreen: React.FC = () => {
     </View>
   );
 
+  const activeMessages = activeChatFriend
+    ? messagesByFriend[activeChatFriend.id] || []
+    : [];
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0B0914" />
@@ -277,6 +346,7 @@ const AforaHomeScreen: React.FC = () => {
         <TouchableOpacity
           style={styles.iconActionBtn}
           onPress={() => {
+            setActiveChatFriend(null);
             setFriendsSubTab('requests');
             setBottomTab('friends');
           }}
@@ -298,7 +368,10 @@ const AforaHomeScreen: React.FC = () => {
 
         <TouchableOpacity
           style={styles.profileChip}
-          onPress={() => setBottomTab('profile')}
+          onPress={() => {
+            setActiveChatFriend(null);
+            setBottomTab('profile');
+          }}
         >
           <View style={styles.profileMiniAvatar}>
             <Text style={styles.profileMiniText}>م</Text>
@@ -307,13 +380,12 @@ const AforaHomeScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* محتوى التبويب المختار */}
+      {/* الرئيسية */}
       {bottomTab === 'home' && (
         <ScrollView
           contentContainerStyle={styles.scrollBody}
           showsVerticalScrollIndicator={false}
         >
-          {/* شريط القصص */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -331,7 +403,6 @@ const AforaHomeScreen: React.FC = () => {
             ))}
           </ScrollView>
 
-          {/* صندوق إنشاء منشور */}
           <View style={styles.composerCard}>
             <View style={styles.composerTop}>
               <View style={styles.composerAvatar}>
@@ -367,7 +438,6 @@ const AforaHomeScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* فلاتر المحتوى */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -396,7 +466,6 @@ const AforaHomeScreen: React.FC = () => {
             })}
           </ScrollView>
 
-          {/* قائمة المنشورات */}
           {filteredPosts.map((post) => (
             <View key={post.id} style={styles.postCard}>
               <View style={styles.postHeader}>
@@ -434,6 +503,7 @@ const AforaHomeScreen: React.FC = () => {
         </ScrollView>
       )}
 
+      {/* البحث عن الأصدقاء */}
       {bottomTab === 'search' && (
         <ScrollView
           contentContainerStyle={styles.scrollBody}
@@ -467,6 +537,7 @@ const AforaHomeScreen: React.FC = () => {
         </ScrollView>
       )}
 
+      {/* الأصدقاء وطلبات الصداقة */}
       {bottomTab === 'friends' && (
         <ScrollView
           contentContainerStyle={styles.scrollBody}
@@ -516,29 +587,144 @@ const AforaHomeScreen: React.FC = () => {
         </ScrollView>
       )}
 
-      {bottomTab === 'chats' && (
+      {/* المحادثات والدردشة المباشرة مع أزرار الاتصال الصوتي والفيديو */}
+      {bottomTab === 'chats' && !activeChatFriend && (
         <ScrollView
           contentContainerStyle={styles.scrollBody}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.sectionBox}>
             <Text style={styles.sectionTitle}>المحادثات</Text>
-            {friendsList.map((friend) => (
-              <View key={friend.id} style={styles.userRowCard}>
-                <View style={styles.userRowAvatar}>
-                  <Text style={styles.userRowAvatarText}>{friend.name.slice(0, 1)}</Text>
-                </View>
-                <View style={styles.userRowMeta}>
-                  <Text style={styles.userRowName}>{friend.name}</Text>
-                  <Text style={styles.userRowBio}>اضغط لبدء محادثة مباشرة</Text>
-                </View>
-                <Ionicons name="chatbubble-ellipses" size={20} color="#A855F7" />
-              </View>
-            ))}
+            {friendsList.length === 0 ? (
+              <Text style={styles.emptyText}>
+                أضف أصدقاء أولاً لبدء الدردشة أو إجراء المكالمات.
+              </Text>
+            ) : (
+              friendsList.map((friend) => (
+                <TouchableOpacity
+                  key={friend.id}
+                  style={styles.userRowCard}
+                  activeOpacity={0.8}
+                  onPress={() => openDirectChat(friend)}
+                >
+                  <View style={styles.userRowAvatar}>
+                    <Text style={styles.userRowAvatarText}>
+                      {friend.name.slice(0, 1)}
+                    </Text>
+                  </View>
+                  <View style={styles.userRowMeta}>
+                    <Text style={styles.userRowName}>{friend.name}</Text>
+                    <Text style={styles.userRowBio}>اضغط لبدء محادثة مباشرة</Text>
+                  </View>
+                  <View style={styles.chatQuickIcons}>
+                    <TouchableOpacity
+                      style={styles.miniCallBtn}
+                      onPress={() => {
+                        setActiveChatFriend(friend);
+                        startCall('voice');
+                      }}
+                    >
+                      <Ionicons name="call" size={16} color="#E9D5FF" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.miniCallBtn}
+                      onPress={() => {
+                        setActiveChatFriend(friend);
+                        startCall('video');
+                      }}
+                    >
+                      <Ionicons name="videocam" size={16} color="#E9D5FF" />
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
           </View>
         </ScrollView>
       )}
 
+      {bottomTab === 'chats' && activeChatFriend && (
+        <View style={styles.chatRoomContainer}>
+          {/* رأس الدردشة مع زر الرجوع + زر مكالمة هاتفية + زر مكالمة فيديو */}
+          <View style={styles.chatRoomHeader}>
+            <View style={styles.chatRoomHeaderLeft}>
+              <TouchableOpacity
+                style={styles.backBtn}
+                onPress={() => setActiveChatFriend(null)}
+              >
+                <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+              <View style={styles.userRowAvatar}>
+                <Text style={styles.userRowAvatarText}>
+                  {activeChatFriend.name.slice(0, 1)}
+                </Text>
+              </View>
+              <View>
+                <Text style={styles.userRowName}>{activeChatFriend.name}</Text>
+                <Text style={styles.onlineStatusText}>متصل الآن</Text>
+              </View>
+            </View>
+
+            <View style={styles.callActionsRow}>
+              <TouchableOpacity
+                style={styles.voiceCallBtn}
+                onPress={() => startCall('voice')}
+              >
+                <Ionicons name="call" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.videoCallBtn}
+                onPress={() => startCall('video')}
+              >
+                <Ionicons name="videocam" size={19} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* رسائل الدردشة */}
+          <ScrollView
+            contentContainerStyle={styles.messagesList}
+            showsVerticalScrollIndicator={false}
+          >
+            {activeMessages.length === 0 ? (
+              <Text style={styles.emptyText}>
+                ابدأ محادثتك مع {activeChatFriend.name} أو اضغط على أيقونة الاتصال أو الفيديو بالأعلى.
+              </Text>
+            ) : (
+              activeMessages.map((msg) => (
+                <View
+                  key={msg.id}
+                  style={[
+                    styles.messageBubble,
+                    msg.sender === 'me'
+                      ? styles.myMessageBubble
+                      : styles.theirMessageBubble,
+                  ]}
+                >
+                  <Text style={styles.messageText}>{msg.text}</Text>
+                  <Text style={styles.messageTime}>{msg.time}</Text>
+                </View>
+              ))
+            )}
+          </ScrollView>
+
+          {/* شريط إرسال الرسالة */}
+          <View style={styles.chatInputBar}>
+            <TextInput
+              style={styles.chatTextInput}
+              placeholder="اكتب رسالتك..."
+              placeholderTextColor="#9CA3AF"
+              value={chatInput}
+              onChangeText={setChatInput}
+            />
+            <TouchableOpacity style={styles.sendMsgBtn} onPress={sendChatMessage}>
+              <Ionicons name="send" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* ملفي الشخصي */}
       {bottomTab === 'profile' && (
         <ScrollView
           contentContainerStyle={styles.scrollBody}
@@ -559,11 +745,83 @@ const AforaHomeScreen: React.FC = () => {
         </ScrollView>
       )}
 
-      {/* الشريط السفلي (الرئيسية - بحث - الأصدقاء - المحادثات - ملفي) */}
+      {/* شاشة المكالمة الصوتية / مكالمة الفيديو */}
+      <Modal
+        visible={callType !== null}
+        animationType="fade"
+        transparent={false}
+        onRequestClose={endCall}
+      >
+        <View style={styles.callScreen}>
+          <View style={styles.callTopInfo}>
+            <Text style={styles.callModeLabel}>
+              {callType === 'video' ? 'مكالمة فيديو' : 'مكالمة هاتفية'}
+            </Text>
+            <Text style={styles.callStatusSub}>جاري الاتصال...</Text>
+          </View>
+
+          <View style={styles.callCenterAvatarWrap}>
+            <View
+              style={[
+                styles.callAvatarCircle,
+                callType === 'video' && styles.videoCallAvatarCircle,
+              ]}
+            >
+              <Text style={styles.callAvatarLetter}>
+                {activeChatFriend?.name.slice(0, 1) || 'أ'}
+              </Text>
+            </View>
+            <Text style={styles.callPeerName}>
+              {activeChatFriend?.name || 'صديق'}
+            </Text>
+            <Text style={styles.callPeerHandle}>
+              {activeChatFriend?.handle || '@user'}
+            </Text>
+          </View>
+
+          <View style={styles.callControlsRow}>
+            <TouchableOpacity
+              style={[styles.callControlBtn, isMuted && styles.callControlBtnActive]}
+              onPress={() => setIsMuted((prev) => !prev)}
+            >
+              <Ionicons
+                name={isMuted ? 'mic-off' : 'mic'}
+                size={24}
+                color="#FFFFFF"
+              />
+              <Text style={styles.callControlLabel}>
+                {isMuted ? 'إلغاء الكتم' : 'كتم الصوت'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.callControlBtn, isSpeaker && styles.callControlBtnActive]}
+              onPress={() => setIsSpeaker((prev) => !prev)}
+            >
+              <Ionicons
+                name={isSpeaker ? 'volume-high' : 'volume-medium'}
+                size={24}
+                color="#FFFFFF"
+              />
+              <Text style={styles.callControlLabel}>السماعة</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.endCallBtn} onPress={endCall}>
+              <Ionicons name="call" size={26} color="#FFFFFF" />
+              <Text style={styles.callControlLabel}>إنهاء</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* الشريط السفلي */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setBottomTab('home')}
+          onPress={() => {
+            setActiveChatFriend(null);
+            setBottomTab('home');
+          }}
         >
           <Ionicons
             name={bottomTab === 'home' ? 'home' : 'home-outline'}
@@ -582,7 +840,10 @@ const AforaHomeScreen: React.FC = () => {
 
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setBottomTab('search')}
+          onPress={() => {
+            setActiveChatFriend(null);
+            setBottomTab('search');
+          }}
         >
           <Ionicons
             name={bottomTab === 'search' ? 'search' : 'search-outline'}
@@ -602,6 +863,7 @@ const AforaHomeScreen: React.FC = () => {
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => {
+            setActiveChatFriend(null);
             setFriendsSubTab('friends');
             setBottomTab('friends');
           }}
@@ -655,7 +917,10 @@ const AforaHomeScreen: React.FC = () => {
 
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setBottomTab('profile')}
+          onPress={() => {
+            setActiveChatFriend(null);
+            setBottomTab('profile');
+          }}
         >
           <Ionicons
             name={bottomTab === 'profile' ? 'person' : 'person-outline'}
@@ -680,6 +945,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0B0914',
+    paddingTop: Platform.OS === 'android' ? 28 : 0,
   },
   topHeader: {
     flexDirection: 'row',
@@ -1068,6 +1334,18 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginTop: 2,
   },
+  chatQuickIcons: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  miniCallBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#31235E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   connectPillBtn: {
     backgroundColor: '#7C3AED',
     paddingHorizontal: 10,
@@ -1142,6 +1420,197 @@ const styles = StyleSheet.create({
     color: '#D1D5DB',
     fontSize: 12,
     marginTop: 4,
+  },
+  chatRoomContainer: {
+    flex: 1,
+    backgroundColor: '#0E0B1A',
+  },
+  chatRoomHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#161226',
+    borderBottomWidth: 1,
+    borderBottomColor: '#261F3E',
+  },
+  chatRoomHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  backBtn: {
+    padding: 6,
+  },
+  onlineStatusText: {
+    color: '#34D399',
+    fontSize: 11,
+    textAlign: 'right',
+  },
+  callActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  voiceCallBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#16A34A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoCallBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#7C3AED',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  messagesList: {
+    padding: 14,
+    gap: 10,
+  },
+  messageBubble: {
+    maxWidth: '78%',
+    padding: 10,
+    borderRadius: 14,
+    gap: 4,
+  },
+  myMessageBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#6D28D9',
+  },
+  theirMessageBubble: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#1E1834',
+    borderWidth: 1,
+    borderColor: '#2E254F',
+  },
+  messageText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    textAlign: 'right',
+  },
+  messageTime: {
+    color: '#E9D5FF',
+    fontSize: 10,
+    textAlign: 'left',
+  },
+  chatInputBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    backgroundColor: '#141024',
+    borderTopWidth: 1,
+    borderTopColor: '#261F3E',
+    gap: 8,
+  },
+  chatTextInput: {
+    flex: 1,
+    backgroundColor: '#0B0914',
+    color: '#FFFFFF',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    fontSize: 13,
+    textAlign: 'right',
+    borderWidth: 1,
+    borderColor: '#2E254F',
+  },
+  sendMsgBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#7C3AED',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  callScreen: {
+    flex: 1,
+    backgroundColor: '#0B0914',
+    justifyContent: 'space-between',
+    paddingVertical: 44,
+    paddingHorizontal: 20,
+  },
+  callTopInfo: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  callModeLabel: {
+    color: '#E9D5FF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  callStatusSub: {
+    color: '#A78BFA',
+    fontSize: 13,
+  },
+  callCenterAvatarWrap: {
+    alignItems: 'center',
+    gap: 10,
+  },
+  callAvatarCircle: {
+    width: 106,
+    height: 106,
+    borderRadius: 53,
+    backgroundColor: '#5B21B6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#8B5CF6',
+  },
+  videoCallAvatarCircle: {
+    borderRadius: 28,
+    width: 130,
+    height: 160,
+    backgroundColor: '#271A4A',
+  },
+  callAvatarLetter: {
+    color: '#FFFFFF',
+    fontSize: 38,
+    fontWeight: '800',
+  },
+  callPeerName: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  callPeerHandle: {
+    color: '#C4B5FD',
+    fontSize: 13,
+  },
+  callControlsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  callControlBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#1E1834',
+    gap: 4,
+  },
+  callControlBtnActive: {
+    backgroundColor: '#6D28D9',
+  },
+  endCallBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#DC2626',
+    gap: 4,
+  },
+  callControlLabel: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });
 
