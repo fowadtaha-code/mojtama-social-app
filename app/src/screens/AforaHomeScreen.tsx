@@ -113,7 +113,7 @@ const POSTS: PostItem[] = [
     handle: '@sara_m',
     timeAgo: 'منذ 4 س',
     type: 'posts',
-    content: 'نعمل على تحسين تجربة الاستخدام في AFORA لتكون أسرع وأوضح للجميع.',
+    content: 'نعمل على تحسين تجربة الاستخدام في WEXO لتكون أسرع وأوضح للجميع.',
   },
   {
     id: 'p3',
@@ -363,7 +363,7 @@ const AforaHomeScreen: React.FC = () => {
           <View style={styles.brandBadge}>
             <Text style={styles.brandBadgeLetter}>A</Text>
           </View>
-          <Text style={styles.brandTitle}>AFORA</Text>
+          <Text style={styles.brandTitle}>WEXO</Text>
         </View>
 
         <TouchableOpacity
@@ -735,7 +735,7 @@ const AforaHomeScreen: React.FC = () => {
               <View style={styles.profileBigAvatar}>
                 <Text style={styles.profileBigAvatarText}>م</Text>
               </View>
-              <Text style={styles.profileName}>حسابي في AFORA</Text>
+              <Text style={styles.profileName}>حسابي في WEXO</Text>
               <Text style={styles.profileHandle}>@afora_user</Text>
               <Text style={styles.profileStats}>
                 الأصدقاء: {friendsList.length} • طلبات الصداقة: {incomingRequests.length}
