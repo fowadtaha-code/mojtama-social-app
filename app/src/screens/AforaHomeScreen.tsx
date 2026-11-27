@@ -10,8 +10,11 @@ import {
   StatusBar,
   Modal,
   Platform,
+  Image,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 
 export interface FriendItem {
   id: string;
@@ -34,8 +37,9 @@ interface PostItem {
   timeAgo: string;
   type: 'posts' | 'photos' | 'videos';
   content: string;
-  hasPhoto?: boolean;
-  hasVideo?: boolean;
+  mediaUri?: string;
+  isFriendUpload?: boolean;
+  downloaded?: boolean;
 }
 
 interface ChatMessage {
@@ -105,7 +109,9 @@ const POSTS: PostItem[] = [
     timeAgo: 'منذ 2 س',
     type: 'photos',
     content: 'أحياناً .. كل ما نحتاجه هو لحظة هدوء وموسيقى جميلة 💜',
-    hasPhoto: true,
+    mediaUri: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800',
+    isFriendUpload: true,
+    downloaded: false,
   },
   {
     id: 'p2',
@@ -114,6 +120,7 @@ const POSTS: PostItem[] = [
     timeAgo: 'منذ 4 س',
     type: 'posts',
     content: 'نعمل على تحسين تجربة الاستخدام في WEXO لتكون أسرع وأوضح للجميع.',
+    isFriendUpload: true,
   },
   {
     id: 'p3',
@@ -122,13 +129,15 @@ const POSTS: PostItem[] = [
     timeAgo: 'منذ 6 س',
     type: 'videos',
     content: 'لقطات سريعة من جولة مسائية على الساحل.',
-    hasVideo: true,
+    mediaUri: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800',
+    isFriendUpload: true,
+    downloaded: true,
   },
 ];
 
 const INITIAL_MESSAGES: Record<string, ChatMessage[]> = {
   '1': [
-    { id: 'm1', sender: 'them', text: 'هلا بك! كيف أمور التطبيق؟', time: '05:10 ص' },
+    { id: 'm1', sender: 'them', text: 'هلا بك! كيف أمور تطبيق WEXO؟', time: '05:10 ص' },
     { id: 'm2', sender: 'me', text: 'أهلاً أحمد، شغالين على تطوير المزايا خطوة بخطوة.', time: '05:12 ص' },
   ],
   '2': [
@@ -136,21 +145,23 @@ const INITIAL_MESSAGES: Record<string, ChatMessage[]> = {
   ],
 };
 
-type MediaFilter = 'all' | 'photos' | 'videos' | 'posts';
+type MediaFilter = 'all' | 'photos' | 'videos' | 'posts' | 'downloaded';
 type BottomTab = 'home' | 'search' | 'friends' | 'chats' | 'profile';
 type FriendsSubTab = 'friends' | 'requests';
 type CallType = 'voice' | 'video' | null;
 
-const AforaHomeScreen: React.FC = () => {
+const WexoHomeScreen: React.FC = () => {
   const [users, setUsers] = useState<FriendItem[]>(INITIAL_FRIENDS_DATA);
   const [activeFilter, setActiveFilter] = useState<MediaFilter>('all');
   const [bottomTab, setBottomTab] = useState<BottomTab>('home');
   const [friendsSubTab, setFriendsSubTab] = useState<FriendsSubTab>('friends');
   const [postDraft, setPostDraft] = useState<string>('');
+  const [selectedMediaUri, setSelectedMediaUri] = useState<string | undefined>(undefined);
+  const [selectedMediaType, setSelectedMediaType] = useState<'photos' | 'videos'>('photos');
   const [postsList, setPostsList] = useState<PostItem[]>(POSTS);
   const [friendSearchQuery, setFriendSearchQuery] = useState<string>('');
+  const [previewPost, setPreviewPost] = useState<PostItem | null>(null);
 
-  // حالة الدردشة والمكالمات
   const [activeChatFriend, setActiveChatFriend] = useState<FriendItem | null>(null);
   const [messagesByFriend, setMessagesByFriend] =
     useState<Record<string, ChatMessage[]>>(INITIAL_MESSAGES);
@@ -169,6 +180,29 @@ const AforaHomeScreen: React.FC = () => {
     [users]
   );
 
+  const friendNamesSet = useMemo(
+    () => new Set(friendsList.map((f) => f.name)),
+    [friendsList]
+  );
+
+  const friendMediaItems = useMemo(
+    () =>
+      postsList.filter(
+        (p) =>
+          (p.type === 'photos' || p.type === 'videos') &&
+          (p.isFriendUpload || friendNamesSet.has(p.author))
+      ),
+    [postsList, friendNamesSet]
+  );
+
+  const downloadedMediaItems = useMemo(
+    () =>
+      postsList.filter(
+        (p) => (p.type === 'photos' || p.type === 'videos') && p.downloaded
+      ),
+    [postsList]
+  );
+
   const filteredFriendsSearch = useMemo(() => {
     const q = friendSearchQuery.trim().toLowerCase();
     if (!q) return users;
@@ -182,8 +216,44 @@ const AforaHomeScreen: React.FC = () => {
 
   const filteredPosts = useMemo(() => {
     if (activeFilter === 'all') return postsList;
+    if (activeFilter === 'downloaded') return downloadedMediaItems;
     return postsList.filter((p) => p.type === activeFilter);
-  }, [postsList, activeFilter]);
+  }, [postsList, activeFilter, downloadedMediaItems]);
+
+  const pickMedia = async (kind: 'photos' | 'videos') => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('تنبيه', 'يرجى السماح بالوصول إلى الصور والفيديوهات لاختيار ملف.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes:
+          kind === 'videos'
+            ? ImagePicker.MediaTypeOptions.Videos
+            : ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelectedMediaUri(result.assets[0].uri);
+        setSelectedMediaType(kind);
+      }
+    } catch {
+      Alert.alert('تعذر الفتح', 'تعذر فتح منتقي الوسائط في هذه البيئة.');
+    }
+  };
+
+  const handleDownloadMedia = (postId: string) => {
+    setPostsList((prev) =>
+      prev.map((item) =>
+        item.id === postId ? { ...item, downloaded: true } : item
+      )
+    );
+    Alert.alert('تم التحميل', 'تم حفظ العنصر ضمن قسم ما تم تحميله.');
+  };
 
   const acceptFriendRequest = (id: string) => {
     setUsers((prev) =>
@@ -219,17 +289,27 @@ const AforaHomeScreen: React.FC = () => {
 
   const handleQuickPublish = () => {
     const text = postDraft.trim();
-    if (!text) return;
+    if (!text && !selectedMediaUri) return;
+
     const newPost: PostItem = {
       id: String(Date.now()),
       author: 'أنت',
-      handle: '@afora_user',
+      handle: '@wexo_user',
       timeAgo: 'الآن',
-      type: 'posts',
-      content: text,
+      type: selectedMediaUri ? selectedMediaType : 'posts',
+      content:
+        text ||
+        (selectedMediaType === 'videos'
+          ? 'مقطع فيديو جديد تم رفعه'
+          : 'صورة جديدة تم رفعها'),
+      mediaUri: selectedMediaUri,
+      isFriendUpload: false,
+      downloaded: false,
     };
+
     setPostsList((prev) => [newPost, ...prev]);
     setPostDraft('');
+    setSelectedMediaUri(undefined);
     setBottomTab('home');
   };
 
@@ -341,7 +421,6 @@ const AforaHomeScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0B0914" />
 
-      {/* الشريط العلوي */}
       <View style={styles.topHeader}>
         <TouchableOpacity
           style={styles.iconActionBtn}
@@ -361,7 +440,7 @@ const AforaHomeScreen: React.FC = () => {
 
         <View style={styles.brandCenter}>
           <View style={styles.brandBadge}>
-            <Text style={styles.brandBadgeLetter}>A</Text>
+            <Text style={styles.brandBadgeLetter}>W</Text>
           </View>
           <Text style={styles.brandTitle}>WEXO</Text>
         </View>
@@ -380,7 +459,6 @@ const AforaHomeScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* الرئيسية */}
       {bottomTab === 'home' && (
         <ScrollView
           contentContainerStyle={styles.scrollBody}
@@ -416,24 +494,41 @@ const AforaHomeScreen: React.FC = () => {
                 onChangeText={setPostDraft}
               />
             </View>
+
+            {selectedMediaUri && (
+              <View style={styles.pickedMediaRow}>
+                <Text style={styles.pickedMediaText}>
+                  {selectedMediaType === 'videos'
+                    ? 'تم اختيار فيديو للإرفاق'
+                    : 'تم اختيار صورة للإرفاق'}
+                </Text>
+                <TouchableOpacity onPress={() => setSelectedMediaUri(undefined)}>
+                  <Ionicons name="close-circle" size={18} color="#F87171" />
+                </TouchableOpacity>
+              </View>
+            )}
+
             <View style={styles.composerActions}>
               <TouchableOpacity
-                onPress={handleQuickPublish}
+                onPress={() => pickMedia('photos')}
                 style={styles.composerIconBtn}
               >
                 <Ionicons name="image-outline" size={20} color="#A78BFA" />
+                <Text style={styles.composerBtnLabel}>صورة</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={handleQuickPublish}
+                onPress={() => pickMedia('videos')}
                 style={styles.composerIconBtn}
               >
                 <Ionicons name="videocam-outline" size={20} color="#C084FC" />
+                <Text style={styles.composerBtnLabel}>فيديو</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleQuickPublish}
-                style={styles.composerIconBtn}
+                style={styles.publishPillBtn}
               >
-                <Ionicons name="create-outline" size={20} color="#E9D5FF" />
+                <Ionicons name="send" size={14} color="#FFFFFF" />
+                <Text style={styles.publishPillText}>نشر</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -449,6 +544,7 @@ const AforaHomeScreen: React.FC = () => {
                 { key: 'photos', label: 'الصور' },
                 { key: 'videos', label: 'الفيديوهات' },
                 { key: 'posts', label: 'المنشورات' },
+                { key: 'downloaded', label: `المحملات (${downloadedMediaItems.length})` },
               ] as { key: MediaFilter; label: string }[]
             ).map((f) => {
               const selected = activeFilter === f.key;
@@ -466,44 +562,215 @@ const AforaHomeScreen: React.FC = () => {
             })}
           </ScrollView>
 
-          {filteredPosts.map((post) => (
-            <View key={post.id} style={styles.postCard}>
-              <View style={styles.postHeader}>
-                <View style={styles.postAuthorLeft}>
-                  <View style={styles.postAvatar}>
-                    <Text style={styles.postAvatarText}>{post.author.slice(0, 1)}</Text>
-                  </View>
-                  <View>
-                    <View style={styles.authorNameRow}>
-                      <Text style={styles.postAuthorName}>{post.author}</Text>
-                      <Ionicons name="checkmark-circle" size={15} color="#38BDF8" />
-                    </View>
-                    <Text style={styles.postTime}>{post.timeAgo}</Text>
-                  </View>
-                </View>
-                <Ionicons name="ellipsis-horizontal" size={18} color="#9CA3AF" />
-              </View>
-
-              <Text style={styles.postContent}>{post.content}</Text>
-
-              {(post.hasPhoto || post.hasVideo) && (
-                <View style={styles.mediaBanner}>
-                  <Ionicons
-                    name={post.hasVideo ? 'play-circle-outline' : 'image-outline'}
-                    size={28}
-                    color="#C084FC"
-                  />
-                  <Text style={styles.mediaBannerText}>
-                    {post.hasVideo ? 'مقطع فيديو مرفق' : 'صورة مرفقة بالمنشور'}
-                  </Text>
-                </View>
-              )}
+          {/* قسم صور وفيديوهات الأصدقاء ومشاهدتها وتحميلها */}
+          <View style={styles.friendsMediaSection}>
+            <View style={styles.friendsMediaHeader}>
+              <Text style={styles.sectionTitle}>
+                صور وفيديوهات الأصدقاء ({friendMediaItems.length})
+              </Text>
+              <TouchableOpacity onPress={() => setActiveFilter('downloaded')}>
+                <Text style={styles.linkActionText}>
+                  ما تم تحميله ({downloadedMediaItems.length})
+                </Text>
+              </TouchableOpacity>
             </View>
-          ))}
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.friendsMediaRow}
+            >
+              {friendMediaItems.map((item) => (
+                <View key={`fm-${item.id}`} style={styles.friendMediaCard}>
+                  <TouchableOpacity
+                    style={styles.friendMediaThumbWrap}
+                    onPress={() => setPreviewPost(item)}
+                  >
+                    {item.mediaUri ? (
+                      <Image
+                        source={{ uri: item.mediaUri }}
+                        style={styles.friendMediaThumb}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.friendMediaPlaceholder}>
+                        <Ionicons
+                          name={item.type === 'videos' ? 'videocam' : 'image'}
+                          size={24}
+                          color="#C084FC"
+                        />
+                      </View>
+                    )}
+                    <View style={styles.mediaTypeTag}>
+                      <Text style={styles.mediaTypeTagText}>
+                        {item.type === 'videos' ? 'فيديو' : 'صورة'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  <Text style={styles.friendMediaAuthor} numberOfLines={1}>
+                    {item.author}
+                  </Text>
+
+                  <View style={styles.friendMediaBtnsRow}>
+                    <TouchableOpacity
+                      style={styles.watchSmallBtn}
+                      onPress={() => setPreviewPost(item)}
+                    >
+                      <Ionicons name="eye-outline" size={14} color="#FFFFFF" />
+                      <Text style={styles.smallActionLabel}>مشاهدة</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.downloadSmallBtn,
+                        item.downloaded && styles.downloadedDoneBtn,
+                      ]}
+                      onPress={() => handleDownloadMedia(item.id)}
+                    >
+                      <Ionicons
+                        name={item.downloaded ? 'checkmark-done' : 'download-outline'}
+                        size={14}
+                        color="#FFFFFF"
+                      />
+                      <Text style={styles.smallActionLabel}>
+                        {item.downloaded ? 'محمّل' : 'تحميل'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+
+          {filteredPosts.length === 0 ? (
+            <Text style={styles.emptyText}>
+              لا توجد عناصر مطابقة لهذا التصفية حالياً.
+            </Text>
+          ) : (
+            filteredPosts.map((post) => (
+              <View key={post.id} style={styles.postCard}>
+                <View style={styles.postHeader}>
+                  <View style={styles.postAuthorLeft}>
+                    <View style={styles.postAvatar}>
+                      <Text style={styles.postAvatarText}>{post.author.slice(0, 1)}</Text>
+                    </View>
+                    <View>
+                      <View style={styles.authorNameRow}>
+                        <Text style={styles.postAuthorName}>{post.author}</Text>
+                        <Ionicons name="checkmark-circle" size={15} color="#38BDF8" />
+                      </View>
+                      <Text style={styles.postTime}>{post.timeAgo}</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="ellipsis-horizontal" size={18} color="#9CA3AF" />
+                </View>
+
+                <Text style={styles.postContent}>{post.content}</Text>
+
+                {(post.type === 'photos' || post.type === 'videos') && (
+                  <View style={styles.mediaCardBox}>
+                    {post.mediaUri ? (
+                      <Image
+                        source={{ uri: post.mediaUri }}
+                        style={styles.postImagePreview}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.mediaBanner}>
+                        <Ionicons
+                          name={post.type === 'videos' ? 'play-circle-outline' : 'image-outline'}
+                          size={28}
+                          color="#C084FC"
+                        />
+                        <Text style={styles.mediaBannerText}>
+                          {post.type === 'videos' ? 'مقطع فيديو مرفق' : 'صورة مرفقة بالمنشور'}
+                        </Text>
+                      </View>
+                    )}
+
+                    <View style={styles.postMediaActions}>
+                      <TouchableOpacity
+                        style={styles.postActionBtn}
+                        onPress={() => setPreviewPost(post)}
+                      >
+                        <Ionicons name="eye-outline" size={16} color="#E9D5FF" />
+                        <Text style={styles.postActionBtnText}>مشاهدة</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.postActionBtn,
+                          post.downloaded && styles.postActionDone,
+                        ]}
+                        onPress={() => handleDownloadMedia(post.id)}
+                      >
+                        <Ionicons
+                          name={post.downloaded ? 'checkmark-done' : 'download-outline'}
+                          size={16}
+                          color="#E9D5FF"
+                        />
+                        <Text style={styles.postActionBtnText}>
+                          {post.downloaded ? 'تم التحميل' : 'تحميل'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+            ))
+          )}
         </ScrollView>
       )}
 
-      {/* البحث عن الأصدقاء */}
+      {/* نافذة مشاهدة الصورة أو الفيديو ومشاركتها/تحميلها */}
+      <Modal
+        visible={previewPost !== null}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setPreviewPost(null)}
+      >
+        <View style={styles.previewModalOverlay}>
+          <View style={styles.previewModalCard}>
+            <View style={styles.previewHeader}>
+              <Text style={styles.previewTitle}>
+                {previewPost?.author} • {previewPost?.type === 'videos' ? 'فيديو' : 'صورة'}
+              </Text>
+              <TouchableOpacity onPress={() => setPreviewPost(null)}>
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            {previewPost?.mediaUri ? (
+              <Image
+                source={{ uri: previewPost.mediaUri }}
+                style={styles.previewFullImage}
+                resizeMode="contain"
+              />
+            ) : (
+              <View style={styles.previewEmptyBox}>
+                <Ionicons name="film-outline" size={42} color="#C084FC" />
+                <Text style={styles.mediaBannerText}>معاينة الوسائط</Text>
+              </View>
+            )}
+
+            <Text style={styles.previewCaption}>{previewPost?.content}</Text>
+
+            {previewPost && (
+              <TouchableOpacity
+                style={styles.modalDownloadBtn}
+                onPress={() => handleDownloadMedia(previewPost.id)}
+              >
+                <Ionicons name="download-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.actionBtnText}>
+                  {previewPost.downloaded ? 'تم حفظه في المحملات' : 'تحميل الآن'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {bottomTab === 'search' && (
         <ScrollView
           contentContainerStyle={styles.scrollBody}
@@ -537,7 +804,6 @@ const AforaHomeScreen: React.FC = () => {
         </ScrollView>
       )}
 
-      {/* الأصدقاء وطلبات الصداقة */}
       {bottomTab === 'friends' && (
         <ScrollView
           contentContainerStyle={styles.scrollBody}
@@ -587,7 +853,6 @@ const AforaHomeScreen: React.FC = () => {
         </ScrollView>
       )}
 
-      {/* المحادثات والدردشة المباشرة مع أزرار الاتصال الصوتي والفيديو */}
       {bottomTab === 'chats' && !activeChatFriend && (
         <ScrollView
           contentContainerStyle={styles.scrollBody}
@@ -645,7 +910,6 @@ const AforaHomeScreen: React.FC = () => {
 
       {bottomTab === 'chats' && activeChatFriend && (
         <View style={styles.chatRoomContainer}>
-          {/* رأس الدردشة مع زر الرجوع + زر مكالمة هاتفية + زر مكالمة فيديو */}
           <View style={styles.chatRoomHeader}>
             <View style={styles.chatRoomHeaderLeft}>
               <TouchableOpacity
@@ -681,7 +945,6 @@ const AforaHomeScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* رسائل الدردشة */}
           <ScrollView
             contentContainerStyle={styles.messagesList}
             showsVerticalScrollIndicator={false}
@@ -708,7 +971,6 @@ const AforaHomeScreen: React.FC = () => {
             )}
           </ScrollView>
 
-          {/* شريط إرسال الرسالة */}
           <View style={styles.chatInputBar}>
             <TextInput
               style={styles.chatTextInput}
@@ -724,7 +986,6 @@ const AforaHomeScreen: React.FC = () => {
         </View>
       )}
 
-      {/* ملفي الشخصي */}
       {bottomTab === 'profile' && (
         <ScrollView
           contentContainerStyle={styles.scrollBody}
@@ -736,16 +997,15 @@ const AforaHomeScreen: React.FC = () => {
                 <Text style={styles.profileBigAvatarText}>م</Text>
               </View>
               <Text style={styles.profileName}>حسابي في WEXO</Text>
-              <Text style={styles.profileHandle}>@afora_user</Text>
+              <Text style={styles.profileHandle}>@wexo_user</Text>
               <Text style={styles.profileStats}>
-                الأصدقاء: {friendsList.length} • طلبات الصداقة: {incomingRequests.length}
+                الأصدقاء: {friendsList.length} • المحملات: {downloadedMediaItems.length}
               </Text>
             </View>
           </View>
         </ScrollView>
       )}
 
-      {/* شاشة المكالمة الصوتية / مكالمة الفيديو */}
       <Modal
         visible={callType !== null}
         animationType="fade"
@@ -814,7 +1074,6 @@ const AforaHomeScreen: React.FC = () => {
         </View>
       </Modal>
 
-      {/* الشريط السفلي */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={styles.navItem}
@@ -1043,6 +1302,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'right',
   },
+  linkActionText: {
+    color: '#C084FC',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   subTabsRow: {
     flexDirection: 'row',
     gap: 8,
@@ -1148,16 +1412,55 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'right',
   },
+  pickedMediaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#21193B',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  pickedMediaText: {
+    color: '#E9D5FF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   composerActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
-    gap: 14,
-    paddingTop: 4,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 6,
     borderTopWidth: 1,
     borderTopColor: '#231D3A',
   },
   composerIconBtn: {
-    padding: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#1E1734',
+  },
+  composerBtnLabel: {
+    color: '#E5E7EB',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  publishPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  publishPillText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   filtersRow: {
     paddingHorizontal: 12,
@@ -1165,7 +1468,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterChip: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
     backgroundColor: '#19142B',
@@ -1178,11 +1481,108 @@ const styles = StyleSheet.create({
   },
   filterText: {
     color: '#D1D5DB',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
   },
   filterTextActive: {
     color: '#FFFFFF',
+  },
+  friendsMediaSection: {
+    marginHorizontal: 12,
+    marginBottom: 14,
+    padding: 12,
+    borderRadius: 18,
+    backgroundColor: '#161226',
+    borderWidth: 1,
+    borderColor: '#261F3E',
+    gap: 10,
+  },
+  friendsMediaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  friendsMediaRow: {
+    gap: 10,
+  },
+  friendMediaCard: {
+    width: 158,
+    backgroundColor: '#1E1834',
+    borderRadius: 14,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#2E254F',
+    gap: 6,
+  },
+  friendMediaThumbWrap: {
+    position: 'relative',
+    width: '100%',
+    height: 92,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  friendMediaThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  friendMediaPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#2A2049',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mediaTypeTag: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: 'rgba(11, 9, 20, 0.8)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  mediaTypeTagText: {
+    color: '#E9D5FF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  friendMediaAuthor: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  friendMediaBtnsRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  watchSmallBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    backgroundColor: '#5B21B6',
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  downloadSmallBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    backgroundColor: '#047857',
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  downloadedDoneBtn: {
+    backgroundColor: '#374151',
+  },
+  smallActionLabel: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
   postCard: {
     marginHorizontal: 12,
@@ -1239,6 +1639,14 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     lineHeight: 21,
   },
+  mediaCardBox: {
+    gap: 8,
+  },
+  postImagePreview: {
+    width: '100%',
+    height: 170,
+    borderRadius: 14,
+  },
   mediaBanner: {
     height: 150,
     borderRadius: 14,
@@ -1253,6 +1661,83 @@ const styles = StyleSheet.create({
     color: '#DDD6FE',
     fontSize: 13,
     fontWeight: '600',
+  },
+  postMediaActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  postActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#251C42',
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#3A2C66',
+  },
+  postActionDone: {
+    backgroundColor: '#1E293B',
+    borderColor: '#334155',
+  },
+  postActionBtnText: {
+    color: '#F3E8FF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  previewModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(6, 5, 12, 0.92)',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  previewModalCard: {
+    backgroundColor: '#161226',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#312754',
+    gap: 12,
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  previewTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  previewFullImage: {
+    width: '100%',
+    height: 250,
+    borderRadius: 12,
+    backgroundColor: '#0B0914',
+  },
+  previewEmptyBox: {
+    height: 200,
+    borderRadius: 12,
+    backgroundColor: '#1E1834',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  previewCaption: {
+    color: '#E5E7EB',
+    fontSize: 13,
+    textAlign: 'right',
+  },
+  modalDownloadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#7C3AED',
+    paddingVertical: 10,
+    borderRadius: 12,
   },
   bottomNav: {
     flexDirection: 'row',
@@ -1614,4 +2099,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default AforaHomeScreen;
+export default WexoHomeScreen;
