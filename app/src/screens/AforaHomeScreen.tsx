@@ -451,8 +451,12 @@ export default function AforaHomeScreen() {
       )}
 
       {/* تبويب البحث */}
-      {activeBottomTab === 'بحث' && (<
-        <FriendsScreen />
+ {/* تبويب البحث */}
+{activeBottomTab === 'بحث' && (
+  <View style={{ flex: 1 }}>
+    <FriendsScreen />
+  </View>
+)}
       {/* تبويب المحادثات */}
       {activeBottomTab === 'المحادثات' && (
         <View style={{ flex: 1 }}>
